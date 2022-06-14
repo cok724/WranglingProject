@@ -1,0 +1,232 @@
+---
+title: "Final Project"
+author: "Christopher Okeefe"
+date: '2022-05-05'
+output:
+  html_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(skimr)
+library(infer)
+library(rvest)
+library(jsonlite)
+library(ggthemes)
+```
+<h1><center>
+Analysis of Inflation During the COVID-19 Pandemic in the United States
+</center></h1>
+
+<h2><center>
+Introduction
+</center></h2>
+
+<h4>
+I would like to set out a few goals for this report:
+</h4>
+<p>
+1. Show graphically the effect that the pandemic has had on prices in the U.S. specifically
+2. Provide insight on how these price increases effect the economy.
+3. Relate these increases in price for consumers into an understanding of the greater impacts on large scale indicators of general economic performance in the U.S.
+</p>
+
+<h3><center> Price Data from the Bureau of Labor Statistics in the US.</center></h3>
+
+```{r prelim, echo=FALSE,message=FALSE,warning=FALSE}
+##Preliminary Work.
+##First creating a function to scrape the Bureau of Labor Statistics Web Page. Assigning names to all of the data frames. Cleaning and Setting up the BLS data to compare with OECD data of the economy on a larger scale.
+
+scrapeBLS <- function(url,table_number = 4){
+  read_html(url) %>%
+    html_elements("table") %>%
+  .[[table_number]] %>%
+  html_table(header = TRUE)
+}
+
+coffee <-scrapeBLS("https://beta.bls.gov/dataViewer/view/timeseries/APU0000717311")
+gasoline <- scrapeBLS("https://beta.bls.gov/dataViewer/view/timeseries/APU000074714")
+bread <- scrapeBLS("https://beta.bls.gov/dataViewer/view/timeseries/APU0000702111")
+utilitygas <- scrapeBLS("https://beta.bls.gov/dataViewer/view/timeseries/APU000072620")
+beef <- scrapeBLS("https://beta.bls.gov/dataViewer/view/timeseries/APU0000703112")
+electricity <- scrapeBLS("https://beta.bls.gov/dataViewer/view/timeseries/APU000072610")
+
+
+coffee <- coffee %>%
+  mutate(coffeeprice = Value) %>%
+  select(-(Value))
+
+gasoline <- gasoline %>%
+  mutate(gasolineprice = Value) %>%
+  select(-(Value))
+
+bread <- bread %>%
+  mutate(breadprice = Value) %>%
+  select(-(Value))
+
+utilitygas <- utilitygas %>%
+  mutate(utilitygasprice = Value) %>%
+  select(-(Value))
+
+beef <- beef %>%
+  mutate(beefprice = Value) %>%
+  select(-(Value))
+
+electricity <- electricity %>%
+  mutate(electricityprice = Value) %>%
+  select(-(Value))
+
+bls <- coffee %>%
+  full_join(gasoline) %>%
+  full_join(utilitygas) %>%
+  full_join(beef) %>%
+  full_join(electricity) %>%
+  full_join(bread) %>%
+  select(-(Period)) %>%
+  mutate(Year = as.character(Year))
+```
+```{r, mutations + write, echo=FALSE}
+##Cleaning data
+bls <- bls %>%
+  mutate(Month = str_remove_all(Label,"2020")) %>%
+  mutate(Month = str_remove_all(Month,"2021")) %>%
+  mutate(Month = str_remove_all(Month,"2022"))
+
+bls <- bls %>%
+  mutate(Quarter = str_replace_all(Label,c("Jan","Feb","Mar"),"Q1")) %>%
+  mutate(Quarter = str_replace_all(Quarter,c("Apr","May","Jun"),"Q2")) %>%
+  mutate(Quarter = str_replace_all(Quarter,c("Jul","Aug","Sep"),"Q3")) %>%
+  mutate(Quarter = str_replace_all(Quarter,c("Oct","Nov","Dec"),"Q4"))
+
+bls <- bls %>%
+  select(-(c(Label,Year)))
+
+write.csv(bls,"Bureau of Labor Statistics.csv")
+```
+
+```{r view, echo=FALSE}
+knitr::kable(bls)
+```
+```{r, echo=FALSE}
+##creating graphs
+p1 <- ggplot(bls,aes(Quarter,coffeeprice,color = Month)) +
+  geom_point() +
+  theme_economist() +
+  xlab("Quarter") +
+  ylab("Price") +
+  ggtitle("Coffee")
+
+p2 <- ggplot(bls,aes(Quarter,gasolineprice,color = Month)) +
+  geom_point() +
+  theme_economist() +
+  xlab("Quarter") +
+  ylab("Price") +
+  ggtitle("Gasoline")
+
+p3 <- ggplot(bls,aes(Quarter,breadprice,color = Month)) +
+  geom_point() +
+  theme_economist() +
+  xlab("Quarter") +
+  ylab("Price") +
+  ggtitle("Bread")
+
+p4 <- ggplot(bls,aes(Quarter,utilitygasprice,color = Month)) +
+  geom_point() +
+  theme_economist() +
+  xlab("Quarter") +
+  ylab("Price") +
+  ggtitle("Utility Gas")
+
+p5 <- ggplot(bls,aes(Quarter,beefprice,color = Month)) +
+  geom_point() +
+  theme_economist() +
+  xlab("Quarter") +
+  ylab("Price") +
+  ggtitle("Beef")
+
+p6 <- ggplot(bls,aes(Quarter,electricityprice,color = Month)) +
+  geom_point() +
+  theme_economist() +
+  xlab("Quarter") +
+  ylab("Price") +
+  ggtitle("Electricity")
+```
+<h2><center> 
+Graphs from the Bureau of Labor Statistics data on common items along with utilities.
+</center></h2>
+<h3><b>NOTE:</b></h3>
+<h4> Food items are per pound. Gasoline is per gallon. Electricity is per kWh. Utility gas is per therm.
+</h4>
+```{r BLS graphs, echo=FALSE,fig.align='center'}
+p1
+p2
+p3
+p4
+p5
+p6
+```
+<h2><center> Observing the Data </center></h2>
+<p> There is a clear increase in price of all of these items. This is due to a number of factors. Notice that for nearly all of the graphs, prices increase during and after <b>Q2</b> (April, May, and June) of 2020. The United States experienced its first "height" of the pandemic around this period. Also take note of gasoline, as it started higher, had a slight dip because of the isolation periods, but continued on a steady path upwards shortly after
+<h4><center> Reasons for Price Increases </center></h4>
+<p style = "font-size:14px;"> As of recently, talk of inflation has been the subject of attention. When money supply grows faster than real output of the economy, inflation occurs. It is calculated using Consumer Price Index, or CPI. This is a measure of the price of goods and services in the country, like some of which were shown on the previous graphs. Another reason for these increases in price are global supply chain shortages. To better understand these large scale indicators of economic performance, we will take a look at some data from the Organization for Economic Co-operation and Development (OECD)</p>
+
+```{r oecd prelim,echo=FALSE, warning=FALSE,message=FALSE}
+employ <- read.csv("employment.csv") %>%
+  filter(Country == "United States") %>%
+  filter(Subject == "Employment rate, Aged 15-64, All persons") %>%
+  mutate("Employment Rate" = Value) %>%
+  filter(Time != c("Q1-2019","Q2-2019","Q3-2019","Q4-2019")) %>%
+  select(c(Time,`Employment Rate`))
+
+gdp <- read.csv("gdp.csv") %>%
+  filter(Country == "United States") %>%
+  filter(Year >= 2015) %>%
+  filter(Transaction == "Gross domestic product (expenditure approach)") %>%
+  filter(Unit == "US Dollar") %>%
+  filter(MEASURE == "C") %>%
+  mutate("GDP (millions)" = Value) %>%
+  select(Year,`GDP (millions)`)
+```
+<h3><center>Employment Rate</center></h3>
+<p> One of the first factors in the price increases is the employment rate during the pandemic. Using employment rate is important here rather than unemployment because it tells the share of people (age 15-64 in this data), who are in the workforce. Employment plays a bigger part during this time period because many people, especially the older population, left permanently in fear of the virus. It makes sense, they were at the most risk of serious illness/death. However, when companies lose workers, they lose some of their ability to produce. This leads to shortages in products across the board.</p>
+
+```{r employ graphs, echo=FALSE, fig.align='center'}
+knitr::kable(employ)
+
+ggplot(employ,aes(x = Time,y = `Employment Rate`)) +
+  geom_point() +
+  ylim(60,75) +
+  theme_economist()
+```
+<p> Shown above, the almost 10 percentage drop of people in the U.S. workforce is bound to have devastating consequences. With regular items (exception of gasoline), consumers are bound to keep consuming at rates pre pandemic. Everybody needs food, most need electricity to survive. When the people who make that possible do not work, problems arise. It can also result in a major hit to the Gross Domestic Product (GDP) of the country. Let's take a look on how it was effected.
+</p>
+<h3><center>
+Gross Domestic Product of the United States</center>
+</h3>
+<h4><center>
+Measured in current dollars, expenditure approach
+</center></h4>
+```{r gdp graphs, echo=FALSE, fig.align='center'}
+knitr::kable(gdp)
+
+ggplot(gdp,aes(x = Year,y = `GDP (millions)`)) +
+  geom_line() +
+  geom_point() +
+  ylim(18000000,23000000) +
+  theme_economist()
+```
+<h4><center>
+An Aside on GDP
+</center></h4>
+<p>
+Many economists regard GDP as one of the most comprehensive indicators of economic performance. It takes into account all transactions of goods and services in the economy, as well as wages (which, yearly, accounts for ~50%). The U.S. has the largest GDP of any country, and in 2021, reached a record near 23 trillion dollars. That may seem like we bounced back from COVID, and to an extent, we did. However, had we continued linearly, we would have a higher number. From 2016-2019, GDP increased about $800 billion yearly. 2020 brought upon a $500 billion dollar hit that hurt the economy.
+</p>
+<h3><center>
+Relating The Information
+</center></h3>
+<p>
+This document was attempted to be formatted in a way that starts from the ground and moves up. Now that we have reached the top, let's work our way back down. The Federal Reserve has the final control on how inflation plays out in the economy. Contrary to popular belief, most of the money they allow to be printed does not go into circulation, but rather things like buying mortgage backed securities. They use economic indicators such as CPI to control interest rates in the country. Nonetheless, trillions of dollars in aid were approved during the Pandemic. GDP is made up of the amount of all transactions in the country. This include wages, as mentioned. The drop in employment, shown above, has had a clear effect on the amount of wages paid (no work, no pay). Therefore, that is one reason for the drop in GDP, along with the drop in production. The government needed a way to prop the economy up for the time being, and the money supply increases. There still lies the problem of slowing production, and labor shortages. Demand for certain products remains the same while the supply decreases. Producers want to keep their profits up, and cannot do that while producing less at the same price. Keep in mind, producers are feeling the effects too when, for example, they can't get as many materials as they used to because this is a global issue that put people out of work around the world. Other countries are dealing with the same problem. The issue eventually works its way down to the average consumer, who, may also be the worker that can no longer work. Consumers are spending more to get the products they once got for cheaper. This is a decrease in purchasing power of the dollar, the definition of inflation.
+
+<h3><center> Concluding </center></h3>
+<p>The main goals of this report were simple. Understanding price increases and the impact on the economy that the pandemic has had Those who have lived through this period of time have dealt with this issue of inflation. It doesn't just apply to the limited number of items included here, it effects mostly everything. It is good to understand not just that it is happening, but why it is happening and how it will effect the decisions you make. I have tried to omit my personal opinion from any part of this report. Thank you for reading!
+</p>
